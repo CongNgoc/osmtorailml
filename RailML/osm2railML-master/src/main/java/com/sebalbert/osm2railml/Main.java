@@ -21,13 +21,17 @@ package com.sebalbert.osm2railml;
 import com.sebalbert.osm2railml.osm.Node;
 import com.sebalbert.osm2railml.osm.OsmExtract;
 import com.sebalbert.osm2railml.osm.Way;
+import com.sebalbert.osm2railml.osm.Way.NodeRef;
+
 import https.www_railml_org.schemas._3.*;
 import org.xml.sax.SAXException;
 
+import javax.management.relation.Relation;
 import javax.xml.XMLConstants;
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.Marshaller;
+import javax.xml.crypto.dsig.keyinfo.RetrievalMethod;
 import javax.xml.validation.Schema;
 import javax.xml.validation.SchemaFactory;
 import java.io.File;
@@ -37,6 +41,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 /**
@@ -53,15 +58,76 @@ public class Main
      */
     public static void main( String[] args ) throws JAXBException, MalformedURLException, SAXException {
         OsmExtract osm = OsmExtract.fromFile(new File("src/main/resource/testOSM.xml"));
-        /* Print location of Node
+        // Print location of Node
+        setTopology();
         for (Node n : osm.nodes)
+        {
             System.out.println(n.id + ": " + n.lat + "/" + n.lon + " [" + n.wayRefs.size() + " - " +
                     n.wayRefs.get(0).way.id);
+            if(n.wayRefs.size() > 1)
+            {
+            	for(int i = 1; i < n.wayRefs.size(); i++)
+            	{
+                	System.out.println("way(" + i + "): " + n.wayRefs.get(i).way.id);  			
+            	}
+            }
+        }
         for (Way w : osm.ways)
+        {
             System.out.println(w.id + ":" + w.nd.size() + " - " + w.nd.get(0).node.id + " [" + w.tags.size() +
                     " - railway:" + w.getTag("railway"));
-		*/
-        // creation of railML structure to be marshalled in the end
+            for (Way.NodeRef nd : w.nd)
+            {
+            	for(int i = 0; i < nd.node.wayRefs.size(); i++)
+            	{
+            		System.out.print("way_Id: " + nd.node.wayRefs.get(i).way.id + " ");
+            		
+            	}
+            	System.out.println();
+            }
+        }
+        //Id way -> list Node ref
+//        for (Way w : osm.ways)
+//        	for(NodeRef nf : w.nd)
+//        		System.out.println(w.id + "_" + nf.node.id );
+
+//        NetElements eles = new NetElements();
+//        eles.getNetElement().addAll(osm.ways.parallelStream().map(w -> wayToNet_Element(w)).collect(Collectors.toList()));
+//        topo.setNetElements(eles);
+        
+//        NetRelations rels = new NetRelations();
+//        rels.getNetRelation().addAll(osm.ways.parallelStream().map(w -> createRelation(w)).collect(Collectors.toList()));
+//        topo.setNetRelations(rels);
+        
+        //Add Network for Topology
+        
+        // create missing references now that all objects are created (c.f. the comments on objectById declaration)
+        //referencesToBeSet.entrySet().parallelStream().forEach(e -> e.getValue()
+        //        .forEach(c -> c.accept(objectById.get(e.getKey()))));
+        
+    }
+    
+    private static NetElement wayToNet_Element(Way way)
+    {
+    	NetElement n_ele = new NetElement();
+    	n_ele.setId("ne_" + way.id);
+    	return n_ele;
+    }
+    private static String getListNetwork(Way way)
+    {
+    	return "ne_" + way.id;
+    }
+    private static RTMNetworkResource getIdOfNetElement(Way way)
+    {
+    	RTMNetworkResource rmtNet  = new RTMNetworkResource();
+    	return rmtNet;
+    }
+    
+    //set topology for micro
+    private static void setTopology() throws JAXBException
+    {
+    	OsmExtract osm = OsmExtract.fromFile(new File("src/main/resource/testOSM.xml"));
+    	 // creation of railML structure to be marshalled in the end
         RailML rail = new RailML();
         rail.setVersion("3.1");
         Infrastructure is = new Infrastructure();
@@ -70,28 +136,167 @@ public class Main
         Topology topo = new Topology();
         is.setTopology(topo);
         
-        //ETracks tracks = new ETracks();
-        //is.setTracks(tracks);
-        //tracks.getTrack().addAll(osm.ways.parallelStream().map(w -> wayToTrack(w)).collect(Collectors.toList()));
-        // create missing references now that all objects are created (c.f. the comments on objectById declaration)
-        //referencesToBeSet.entrySet().parallelStream().forEach(e -> e.getValue()
-        //        .forEach(c -> c.accept(objectById.get(e.getKey()))));
-        JAXBContext jc = JAXBContext.newInstance(RailML.class);
+    	NetElements nets = new NetElements();
+    	NetRelations net_rels = new NetRelations();
+    	List<NetElement> l_ele = new ArrayList<NetElement>();
+    	List<TElementWithIDref> l_ref = new ArrayList<TElementWithIDref>();
+    	List<NetRelation> l_rel = new ArrayList<NetRelation>();
+    	
+    	Networks networks = new Networks();
+    	Network network = new Network(); 
+    	for(Way way : osm.ways)
+    	{
+    		NetElement ele = new NetElement();
+    		ele.setId("ne_" + way.id);
+	    	l_ele.add(ele);
+	    	for (Way.NodeRef nd : way.nd) {
+	    		final int way_at_node =  nd.node.wayRefs.size();
+	    		if (way_at_node == 2) {
+	    			TElementWithIDref e_ref_1 = new TElementWithIDref();
+	    			e_ref_1.setRef("nr_" + nd.node.wayRefs.get(0).way.id + "_" + nd.node.wayRefs.get(1).way.id);		
+	    			ele.getRelation().add(e_ref_1);
+	    		}
+	    		else if(way_at_node > 2)
+	    		{
+	    			for(int i = 0; i < way_at_node; i++)
+	    			{
+	    				if(way.id == nd.node.wayRefs.get(i).way.id)
+	    				{
+	    					TElementWithIDref e_ref_2 = new TElementWithIDref();
+	    					TElementWithIDref e_ref_3 = new TElementWithIDref();
+	    					switch (i) {		
+							case 0:						
+		    	    			e_ref_2.setRef("nr_" + nd.node.wayRefs.get(0).way.id + "_" + nd.node.wayRefs.get(1).way.id);
+		    	    			e_ref_3.setRef("nr_" + nd.node.wayRefs.get(0).way.id + "_" + nd.node.wayRefs.get(2).way.id);
+								break;
+							case 1:
+		    	    			e_ref_2.setRef("nr_" + nd.node.wayRefs.get(0).way.id + "_" + nd.node.wayRefs.get(1).way.id);
+		    	    			e_ref_3.setRef("nr_" + nd.node.wayRefs.get(1).way.id + "_" + nd.node.wayRefs.get(2).way.id);
+								break;
+							case 2:
+								e_ref_2.setRef("nr_" + nd.node.wayRefs.get(0).way.id + "_" + nd.node.wayRefs.get(2).way.id);
+		    	    			e_ref_3.setRef("nr_" + nd.node.wayRefs.get(1).way.id + "_" + nd.node.wayRefs.get(2).way.id);
+								break;
+							default:
+								break;
+							}
+	    					ele.getRelation().add(e_ref_2);
+	    	    			ele.getRelation().add(e_ref_3);
+	    				}
+	    			}
+	    		}
+	    	}
+	    }
+    	for (Node n : osm.nodes)
+        {
+    		//NetRelation
+    		NetRelation rel;
+    		if(n.wayRefs.size() >= 2)
+            {
+            	for(int i = 0; i < n.wayRefs.size() - 1; i++)
+            	{
+            		for(int j = i+1; j < n.wayRefs.size(); j++)
+            		{
+            			rel = new NetRelation();
+            			rel.setId("nr_" + n.wayRefs.get(i).way.id+ "_" + n.wayRefs.get(j).way.id);
+            			TElementWithIDref t_eleA = new TElementWithIDref();
+                    	t_eleA.setRef("ne_" + n.wayRefs.get(i).way.id);
+                    	rel.setElementA(t_eleA);
+                    	TElementWithIDref t_eleB = new TElementWithIDref();
+                    	t_eleB.setRef("ne_" + n.wayRefs.get(j).way.id);
+                    	rel.setElementB(t_eleB);
+                    	l_rel.add(rel);
+                    	//PositinOnA & PositionOnB
+            		}
+            	}
+            }
+        }
+    	nets.getNetElement().addAll(l_ele);
+    	net_rels.getNetRelation().addAll(l_rel);
+    	topo.setNetElements(nets);
+    	topo.setNetRelations(net_rels);
+    	
+    	JAXBContext jc = JAXBContext.newInstance(RailML.class);
         Marshaller marshaller = jc.createMarshaller();
-        // SchemaFactory schemaFactory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
-        // Schema schema = schemaFactory.newSchema(
-        //          new URL("http://www.railml.org/files/download/schemas/2016/railML-2.3/schema/infrastructure.xsd"));
-        // marshaller.setSchema(schema);
+//         SchemaFactory schemaFactory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
+//         Schema schema = schemaFactory.newSchema(
+//                  new URL("file:///F:/Projects/RailML/osm2railML-master/src/main/xsd/infrastructure3.xsd"));
+//         marshaller.setSchema(schema);
         marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
-        marshaller.marshal(rail, System.out);
+        File file = new File("src/main/resource/railml.xml");
+        marshaller.marshal(rail, file);
     }
-
+    
+    
+    private static NetRelation createRelation(Way way)
+    {   	
+    	//Review ? Return last Object
+    	NetRelation rel = new NetRelation();
+    	for (Way.NodeRef nd : way.nd){
+            final int waysAtNode = nd.node.wayRefs.size();
+            if(waysAtNode == 2)
+            {
+            	rel.setId("nr_" + nd.node.wayRefs.get(0).way.id + "_" + nd.node.wayRefs.get(1).way.id);
+            	TElementWithIDref t_eleA = new TElementWithIDref();
+            	t_eleA.setRef("ne_" + nd.node.wayRefs.get(0).way.id);
+            	rel.setElementA(t_eleA);
+            	TElementWithIDref t_eleB = new TElementWithIDref();
+            	t_eleB.setRef("ne_" + nd.node.wayRefs.get(1).way.id);
+            	rel.setElementB(t_eleB);
+            }
+            if(waysAtNode > 2)
+            {
+//            	rel.setId("nr_" + nd.node.wayRefs.get(0).way.id + "_" + nd.node.wayRefs.get(2).way.id);
+//            	TElementWithIDref t_eleA = new TElementWithIDref();
+//            	t_eleA.setRef("ne_" + nd.node.wayRefs.get(0).way.id);
+//            	rel.setElementA(t_eleA);
+//            	TElementWithIDref t_eleB = new TElementWithIDref();
+//            	t_eleB.setRef("ne_" + nd.node.wayRefs.get(2).way.id);
+//            	rel.setElementB(t_eleB);
+            	
+//            	for(int i = 0; i < nd.node.wayRefs.size(); i++)
+//            	{
+//            		for(int j = i+1; j < nd.node.wayRefs.size() - 1; j++)
+//            		{
+//            			rel.setId("nr_" + nd.node.wayRefs.get(i).way.id+ "_" + nd.node.wayRefs.get(j).way.id);
+//            			TElementWithIDref t_eleA = new TElementWithIDref();
+//                    	t_eleA.setRef("ne_" + nd.node.wayRefs.get(i).way.id);
+//                    	rel.setElementA(t_eleA);
+//                    	TElementWithIDref t_eleB = new TElementWithIDref();
+//                    	t_eleB.setRef("ne_" + nd.node.wayRefs.get(j).way.id);
+//                    	rel.setElementB(t_eleB);
+//                    	//PositinOnA & PositionOnB
+//            		}
+//            	}
+            }
+    	}    
+    	return rel;
+    }
+    
+    private static Network wayToNetWork(Way way)
+    {
+    	Network net = new Network();
+    	
+    	return net;	
+    }
+    
     private static BigDecimal doubleToBigDecimal(double value, int scale) {
         return new BigDecimal(new BigInteger(Long.toString(Math.round(value * Math.pow(10, scale)))), scale);
     }
 
-    //Micro 
-    //private static Eleme
+//    private static void makeConnection(TConnectionData conn, Way.NodeRef nd, Way.NodeRef other, boolean relink,
+//            String prefix) {
+//		String thisConnId = prefix + "_" + nd.way.id + "_" + nd.node.id + "_" + other.way.id;
+//		String thatConnId = prefix + "_" + other.way.id + "_" + nd.node.id + "_" + nd.way.id;
+//		setConnectionIdAndRef(conn, thisConnId, thatConnId, relink);
+//	}
+//	                     
+//	private static void makeConnection(ETrackNode trackNode, Way.NodeRef nd, Way.NodeRef other, boolean relink) {
+//		TConnectionData conn = new TConnectionData();
+//		makeConnection(conn, nd, other, relink);
+//		trackNode.setConnection(conn);
+//	}
+
     
     
     // OSM Ways are a good fit for railML Tracks (1:1)
