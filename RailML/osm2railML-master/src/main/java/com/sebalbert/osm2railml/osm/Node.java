@@ -44,7 +44,7 @@ public class Node extends Taggable {
     public final Double lat = Double.NaN, lon = Double.NaN;
 
     @XmlTransient
-    public final List<Way.NodeRef> wayRefs = new ArrayList<>();//so Node tren 1 Way
+    public final List<Way.NodeRef> wayRefs = new ArrayList<>();//
 
     private Node() { }
 
