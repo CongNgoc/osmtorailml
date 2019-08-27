@@ -21,22 +21,20 @@ package com.sebalbert.osm2railml;
 import com.sebalbert.osm2railml.osm.Node;
 import com.sebalbert.osm2railml.osm.OsmExtract;
 import com.sebalbert.osm2railml.osm.Way;
-<<<<<<< HEAD
-import org.railml.schemas._2016.*;
-=======
 import com.sebalbert.osm2railml.osm.Way.NodeRef;
 
 import https.www_railml_org.schemas._3.*;
 import net.sf.geographiclib.Geodesic;
 import net.sf.geographiclib.GeodesicData;
 
->>>>>>> b174f7ad7c67e9d56dd0cb688a70de5bce49e715
 import org.xml.sax.SAXException;
 
+import javax.management.relation.Relation;
 import javax.xml.XMLConstants;
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.Marshaller;
+import javax.xml.crypto.dsig.keyinfo.RetrievalMethod;
 import javax.xml.validation.Schema;
 import javax.xml.validation.SchemaFactory;
 import java.io.File;
@@ -63,35 +61,6 @@ public class Main
      * @throws JAXBException
      */
     public static void main( String[] args ) throws JAXBException, MalformedURLException, SAXException {
-<<<<<<< HEAD
-        OsmExtract osm = OsmExtract.fromFile(new File("src/main/resource/AusOSM.xml"));
-        for (Node n : osm.nodes)
-            System.out.println(n.id + ": " + n.lat + "/" + n.lon + " [" + n.wayRefs.size() + " - " +
-                    n.wayRefs.get(0).way.id +"]");
-        
-        for (Way w : osm.ways)
-        {
-        	String s = new String();
-        	s = "";
-        	for(int i =0; i< w.nd.size(); i++)
-        	{
-        		s +=  w.nd.get(i).node.id +","; 
-        	}
-        	System.out.println(w.id + ":" + w.nd.size() + " - " + s + " [" + w.tags.size() +
-                    " - railway:" + w.getTag("railway")+ "]");
-        }
-//   
-        // creation of railML structure to be marshalled in the end
-        Infrastructure is = new Infrastructure();
-        is.setId("is");
-        ETracks tracks = new ETracks();
-        is.setTracks(tracks);
-        tracks.getTrack().addAll(osm.ways.parallelStream().map(w -> wayToTrack(w)).collect(Collectors.toList()));
-        // create missing references now that all objects are created (c.f. the comments on objectById declaration)
-        referencesToBeSet.entrySet().parallelStream().forEach(e -> e.getValue()
-                .forEach(c -> c.accept(objectById.get(e.getKey()))));
-        JAXBContext jc = JAXBContext.newInstance(Infrastructure.class);
-=======
         OsmExtract osm = OsmExtract.fromFile(new File("src/main/resource/Switch4OSM.xml"));
        
         for (Node n : osm.nodes)
@@ -268,148 +237,13 @@ public class Main
     	func_insfr.setSwitchesIS(switchesIS);
     	is.setFunctionalInfrastructure(func_insfr);
     	JAXBContext jc = JAXBContext.newInstance(RailML.class);
->>>>>>> b174f7ad7c67e9d56dd0cb688a70de5bce49e715
         Marshaller marshaller = jc.createMarshaller();
-        // SchemaFactory schemaFactory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
-        // Schema schema = schemaFactory.newSchema(
-        //          new URL("http://www.railml.org/files/download/schemas/2016/railML-2.3/schema/infrastructure.xsd"));
-        // marshaller.setSchema(schema);
+//         SchemaFactory schemaFactory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
+//         Schema schema = schemaFactory.newSchema(
+//                  new URL("file:///F:/Projects/RailML/osm2railML-master/src/main/xsd/infrastructure3.xsd"));
+//         marshaller.setSchema(schema);
         marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
-        
-        //Cong add
         File file = new File("src/main/resource/railml.xml");
-<<<<<<< HEAD
-        //end edit
-        marshaller.marshal(is, file);
-    }
-
-    private static BigDecimal doubleToBigDecimal(double value, int scale) {
-        return new BigDecimal(new BigInteger(Long.toString(Math.round(value * Math.pow(10, scale)))), scale);
-    }
-
-    // OSM Ways are a good fit for railML Tracks (1:1)
-    private static ETrack wayToTrack(Way way) {
-        ETrack t = new ETrack();
-        t.setId("w_" + way.id);
-        ETrackTopology topo = new ETrackTopology();
-        t.setTrackTopology(topo);
-        
-        String code = way.getTag("ref");
-        if (code != null) t.setCode(code);
-
-        ETrackBegin tB = new ETrackBegin();
-        topo.setTrackBegin(tB);
-        tB.setId("tB_" + way.id);
-        setTrackBeginOrEnd(tB, way.nd.getFirst());
-        ETrackEnd tE = new ETrackEnd();
-        topo.setTrackEnd(tE);
-        tE.setId("tE_" + way.id);
-        setTrackBeginOrEnd(tE, way.nd.getLast());
-
-        EConnections connections = new EConnections();
-        topo.setConnections(connections);
-        for (Way.NodeRef nd : way.nd) {
-            final int waysAtNode = nd.node.wayRefs.size();
-            final int topologicalPosition = nd.topologicalPosition();
-            final ETrackNode beginOrEnd = topologicalPosition == Way.NodeRef.FIRST ? tB
-                    : topologicalPosition == Way.NodeRef.LAST ? tE : null;
-            // detect and model switches and crossings
-            if (waysAtNode > 1) {
-                Way.NodeRef partner = mutuallyOppositeEnd(nd);
-                if (beginOrEnd != null && partner != null) makeConnection(beginOrEnd, nd, partner, true);
-                String nodeType = nd.node.getTag("railway");
-                if (nodeType != null && nodeType.equals("railway_crossing")) {
-                    // avoid setting a crossing at both respective ends of two sequentially joined tracks
-                    if (!isCanonicalNodeRef(nd)) continue;
-                    ECrossing crossing = new ECrossing();
-                    crossing.setId("crossing_" + way.id + "_" + nd.node.id);
-                    crossing.setPos(doubleToBigDecimal(nd.position(), 6));
-                    for (Way.NodeRef otherWayRef : nd.node.wayRefs) {
-                        if (otherWayRef == nd) continue;
-                        // avoid setting a crossing at both respective ends of two sequentially joined tracks
-                        if (!isCanonicalNodeRef(otherWayRef)) continue;
-                        TSwitchConnectionData conn = new TSwitchConnectionData();
-                        String thisConnId = "crossing_conn_" + way.id + "_" + nd.node.id + "_" + otherWayRef.way.id;
-                        String thatConnId = "crossing_conn_" + otherWayRef.way.id + "_" + nd.node.id + "_" + way.id;
-                        setConnectionIdAndRef(conn, thisConnId, thatConnId, true);
-                    }
-                } else {
-                    // unless explicitly set as "railway_crossing", we assume a switch
-                    String switchType = nd.node.getTag("railway:switch");
-                    if (isCanonicalNodeRef(nd) &&
-                            (topologicalPosition == Way.NodeRef.INTERIOR || (waysAtNode > 2 && partner != null))) {
-                        String maxSpeedStraight = nd.node.getTag("railway:maxspeed:straight");
-                        String maxSpeedDiverging = nd.node.getTag("railway:maxspeed:diverging");
-                        BigDecimal maxSpeedDiv = maxSpeedDiverging == null ? null :
-                                new BigDecimal(maxSpeedDiverging).setScale(1, BigDecimal.ROUND_DOWN);
-                        BigDecimal maxSpeedStr = maxSpeedStraight == null ? null :
-                                new BigDecimal(maxSpeedStraight).setScale(1, BigDecimal.ROUND_DOWN);
-                        String switchId = "switch_" + nd.node.id;
-                        if (objectById.containsKey(switchId))
-                            throw new RuntimeException("more than 1 straight way on simple switch node " + nd.node.id);
-                        ESwitch sw = new ESwitch();
-                        sw.setId(switchId);
-                        sw.setPos(doubleToBigDecimal(nd.position(), 6));
-                        objectById.put(switchId, sw);
-                        if (switchType != null && switchType.equals("double_slip")) {
-                            Way.NodeRef other = nd.node.wayRefs.stream().filter(r -> r != nd && r != partner)
-                                    .min(Comparator.comparing(r -> r.way.id)).orElse(null);
-                            if (other == null) {
-                                System.out.println("Error: double_slip without other track at " + nd.node.id);
-                                continue;
-                            }
-                            TSwitchConnectionData conn = new TSwitchConnectionData();
-                            // @TODO build own connections, connect to other switch in callback closure
-                            continue;
-                        }
-                        if (switchType != null && switchType.equals("single_slip")) {
-                            System.out.println("Warning: single_slip at " + nd.node.id +
-                                    ", choosing arbitrary direction!");
-                            // @TODO
-                            continue;
-                        }
-                        for (Way.NodeRef other : nd.node.wayRefs) {
-                            if (other == nd || other == partner) continue;
-                            TSwitchConnectionData conn = new TSwitchConnectionData();
-                            int orientation = inferSwitchOrientation(nd, other);
-                            conn.setOrientation((orientation & INCOMING) > 0 ? "incoming" : "outgoing");
-                            conn.setCourse((orientation & LEFT) > 0 ? "left" : "right");
-                            makeConnection(conn, nd, other, false);
-                            sw.getConnection().add(conn);
-                            if (maxSpeedDiv != null) conn.setMaxSpeed(maxSpeedDiv);
-                        }
-                        connections.getSwitchOrCrossing().add(sw);
-                    } else if (partner == null) {
-                        if (switchType != null && switchType.equals("double_slip")) {
-                            // @TODO
-                            continue;
-                        }
-                        if (switchType != null && switchType.equals("single_slip")) {
-                            // @TODO
-                            continue;
-                        }
-                        setReferenceLater("switch_" + nd.node.id, sw -> {
-                            for (TSwitchConnectionData swconn : ((ESwitch) sw).getConnection()) {
-                                if (swconn.getRef() != null) continue;
-                                if (swconn.getId().endsWith("_" + nd.node.id + "_" + way.id)) {
-                                    TConnectionData conn = new TConnectionData();
-                                    /*String[] tokens = swconn.getId().split("_");
-                                    if (tokens.length != 4 || !tokens[0].equals("conn")
-                                            || !tokens[2].equals(nd.node.id) || !tokens[3].equals(way.id))
-                                        throw new RuntimeException("wrong id on switch connection: " + swconn.getId());
-                                    conn.setId("conn_" + way.id + "_" + nd.node.id + "_" + tokens[1]);*/
-                                    conn.setId(swconn.getId() + "_cont");
-                                    conn.setRef(swconn);
-                                    beginOrEnd.setConnection(conn);
-                                    swconn.setRef(conn);
-                                    return;
-                                }
-                            }
-                            System.out.println("Error: could not hook up way " + way.id + " to switch " + nd.node.id);
-                        });
-                    }
-                }
-=======
         marshaller.marshal(rail, file); 
     }
     
@@ -537,7 +371,6 @@ public class Main
             	Border border = new Border();     	
             	setValueBorder(border, nd, netelement_id);
             	list_Border.add(border);
->>>>>>> b174f7ad7c67e9d56dd0cb688a70de5bce49e715
             }
     	}
     }
@@ -564,27 +397,6 @@ public class Main
 		switchIS.getSpotLocation().add(spot_loc);
     	return switchIS;
     }
-<<<<<<< HEAD
-
-    // some railML objects that need to be referenced may not have been created before, so we need to
-    // add those references after they have been created (e.g. after everything is created),
-    // so we maintain a "registry" HashMap (objectById) and a "to do" list per ID (referencesToBeSet).
-    // these are realised as "callback" closures so we do not need to remember and reflect on which field
-    // of the referencing object the reference must be set
-    private static Map<String, Object> objectById = Collections.synchronizedMap(new HashMap<>());
-    private static Map<String, List<Consumer<Object>>> referencesToBeSet = Collections.synchronizedMap(new HashMap<>());
-    private static void setReferenceLater(String id, Consumer<Object> c) {
-        Object o = objectById.get(id);
-        // bad idea for parallel execution
-//        if (o != null) {
-//            c.accept(o);
-//            return;
-//        }
-        referencesToBeSet.computeIfAbsent(id, k -> new LinkedList<Consumer<Object>>()).add(c);
-        referencesToBeSet.computeIfAbsent(id, k -> Collections.synchronizedList(new LinkedList<Consumer<Object>>()))
-                .add(c);
-
-=======
     
     /* Create date: 26/08/2019
      * Author: Cong Nguyen
@@ -597,15 +409,9 @@ public class Main
     	lvCrossing.setId("crossing" + nd.node.id);
     	
     	return lvCrossing;
->>>>>>> b174f7ad7c67e9d56dd0cb688a70de5bce49e715
     }
     
     private static BigDecimal doubleToBigDecimal(double value, int scale) {
         return new BigDecimal(new BigInteger(Long.toString(Math.round(value * Math.pow(10, scale)))), scale);
     }
-<<<<<<< HEAD
-
 }
-=======
-}
->>>>>>> b174f7ad7c67e9d56dd0cb688a70de5bce49e715
