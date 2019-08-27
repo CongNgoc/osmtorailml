@@ -42,11 +42,12 @@ import javax.xml.bind.annotation.XmlType;
  * 
  * 
  */
-@XmlRootElement
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlType(name = "railML", propOrder = {
 
 })
+//Edit by Cong
+@XmlRootElement
 public class RailML {
 
     protected Metadata metadata;

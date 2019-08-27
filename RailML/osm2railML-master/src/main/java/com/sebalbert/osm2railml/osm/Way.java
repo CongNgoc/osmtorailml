@@ -1,5 +1,5 @@
 /**
- osm2railML - creating railML infrastructure from OpenStreetMap data
+  osm2railML - creating railML infrastructure from OpenStreetMap data
  Copyright (C) 2016-2017  Sebastian Albert
 
  This program is free software: you can redistribute it and/or modify
@@ -41,7 +41,6 @@ public class Way extends Taggable {
     @XmlElement(name = "nd")
     public LinkedList<NodeRef> nd = new LinkedList<NodeRef>();
     
-    //List Node Ref
     public void afterUnmarshal(Unmarshaller u, Object parent) {
         NodeRef prev = null;
         for (NodeRef r : nd) {
@@ -51,7 +50,7 @@ public class Way extends Taggable {
         }
     }
 
-    public static class NodeRef {
+    public static class NodeRef{
 
         public final static int FIRST = 1, LAST = -1, INTERIOR = 0;
 
@@ -63,10 +62,10 @@ public class Way extends Taggable {
 
         @XmlTransient
         public NodeRef prev, next;
-        //
+        //Comment by Cong
         public void afterUnmarshal(Unmarshaller u, Object parent) {
-            this.way = (Way) parent;
-            this.node.wayRefs.add(this);//Add Node(Info) to WayRef 
+        	this.way = (Way) parent; // add way parent into way of Noderef
+            this.node.wayRefs.add(this);//Add NodeRef(Info) to WayRef - Comment by Cong     
         }
 
         public int topologicalPosition() {
@@ -88,6 +87,7 @@ public class Way extends Taggable {
         public double position() {
             if (position == null) position = topologicalPosition() == FIRST ? 0.0 :
                     prev.position() + geodesicData().s12;
+            	//geodesicData().s12 : arc length on the auxiliary sphere between point 1 and point 2 (degrees).
             return position;
         }
 
@@ -96,7 +96,7 @@ public class Way extends Taggable {
                     geodesicData().azi2);
             return azimuth;
         }
-
+        
         public double azimuthTowardsWay() {
             // turn around by 180° if this is the last point (because azimuth points in direction prev -> this)
             return azimuth() + (topologicalPosition() == LAST ? Math.PI : 0.0);

@@ -72,7 +72,5 @@ public class NetElements {
         }
         return this.netElement;
     }
-    public void setNetElements(List<NetElement> netEles){
-    	this.netElement = netEles;
-    }
+
 }
