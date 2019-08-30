@@ -1,20 +1,16 @@
 /**
  osm2railML - creating railML infrastructure from OpenStreetMap data
  Copyright (C) 2016-2017  Sebastian Albert
-
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
  the Free Software Foundation, either version 3 of the License, or
  (at your option) any later version.
-
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  GNU General Public License for more details.
-
  You should have received a copy of the GNU General Public License
  along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
  */
 package com.sebalbert.osm2railml;
 
@@ -61,23 +57,21 @@ public class Main
      * @throws JAXBException
      */
     public static void main( String[] args ) throws JAXBException, MalformedURLException, SAXException {
-        OsmExtract osm = OsmExtract.fromFile(new File("src/main/resource/Switch4OSM.xml"));
+        OsmExtract osm = OsmExtract.fromFile(new File("src/main/resource/22-08-2019-remove-dupOSM.xml"));
        
-        for (Node n : osm.nodes)
-        {
-            System.out.println(n.id + ": " + n.lat + "/" + n.lon + " [" + n.tags.size() + " - ");
-            
-            for(int i = 0; i < n.tags.size(); i++)
-            {
-            	System.out.println("        Tag: " + n.tags.get(i).key + "->" + n.tags.get(i).value);
-            }
-        }
-        System.out.println("Tag " + osm.nodes.get(0).tags.get(0).key + "->" + osm.nodes.get(0).tags.get(0).value);
-//        for (Way w : osm.ways)
+//        for (Node n : osm.nodes)
 //        {
-//            System.out.println(w.id + ":" + w.nd.size() + " - " + w.nd.get(0).node.id + " [" + w.tags.size() +
-//                    " - railway:" + w.getTag("railway")); 
-//        } 	
+//            System.out.println(n.id + ": " + n.lat + "/" + n.lon + " [" + n.wayRefs.size() + " - ");
+//            if(n.wayRefs.size() == 0)
+//            {
+//            	System.out.println("Node " + n.id);
+//            }
+//        }
+        for (Way w : osm.ways){
+            System.out.println(w.id + ":" + w.nd.size() + " - " + w.nd.get(0).node.id + " [" + w.tags.size() +
+                    " - railway:" + w.getTag("railway"));
+            System.out.println("Way Nd: " + w.nd.getLast().way.id);
+        }
         setTopology(); 
     }
     
@@ -85,13 +79,13 @@ public class Main
     /*
      * Created date: 20/08/2019
      * Author: Cong Nguyen
-     * Modified date: ///
+     * Modified date: 28/08/2019
      * Description: Create structure for micro topology
      * */
     //set topology for micro
     private static void setTopology() throws JAXBException
     {
-    	OsmExtract osm = OsmExtract.fromFile(new File("src/main/resource/Switch4OSM.xml"));
+    	OsmExtract osm = OsmExtract.fromFile(new File("src/main/resource/22-08-2019-remove-dupOSM.xml"));
     	 // creation of railML structure to be marshalled in the end
         RailML rail = new RailML();
         rail.setVersion("3.1");
@@ -103,15 +97,21 @@ public class Main
         //FunctionalInfrastructure contain "tracks", "crossing", "bufferStop"
         FunctionalInfrastructure func_insfr = new FunctionalInfrastructure();
         
-        //NetElemnt & NetRelation
+        //NetElemnt & NetRelation & NetWork
     	NetElements nets = new NetElements();
     	NetRelations net_rels = new NetRelations();
+    	Networks networks = new Networks();	
+    	Network network = new Network();
+    	network.setId("nw01");
+    	RTMLevelNetwork level_network = new RTMLevelNetwork();
+    	level_network.setId("lv0");
     	List<NetElement> l_ele = new ArrayList<NetElement>();	
     	List<NetRelation> l_rel = new ArrayList<NetRelation>();
-    		
+    	List<TElementWithIDref> l_NetworkResource = new ArrayList<TElementWithIDref>();
+    	
     	//Track - set structure for Track
     	Tracks trcs = new Tracks();
-		trcs.getTrack().addAll(osm.ways.parallelStream().map(w ->wayToTrack(w)).collect(Collectors.toList()));
+    	List<Track> l_track = new ArrayList<Track>();
     	
 		//BufferStops & OpenEnd- set structure for BufferStops& OpenEnd
 		BufferStops buffer_stops = new BufferStops();
@@ -129,10 +129,15 @@ public class Main
     	{
     		//Add ID for NetElement
     		String netelement_id = "w_" + way.id;
-
+    		
+    		//Add NetworkResource to List NetworkResource
+    		TElementWithIDref NetworkResource = new TElementWithIDref();
+    		NetworkResource.setRef(netelement_id);
+    		l_NetworkResource.add(NetworkResource);
+    		
 	    	//Add Child associatedPositioningSystem into NetElement
 	    	RTMAssociatedPositioningSystem assoc_net_element = new RTMAssociatedPositioningSystem();
-	    	assoc_net_element.setPositioningSystemRef(netelement_id + "_gps01");
+	    	assoc_net_element.setId(netelement_id + "_gps01");
     		
     		//Add Child intrinsicCoordinate into associatedPositioningSystem
     		RTMIntrinsicCoordinate intric_coor_1 = new RTMIntrinsicCoordinate();
@@ -144,6 +149,9 @@ public class Main
 			int middle = (way.nd.size() - 1) / 2 ;
 			geo_coor.setX(way.nd.get(middle).node.lon);
 			geo_coor.setY(way.nd.get(middle).node.lat);
+			//Modify date: 28/08
+			geo_coor.setPositioningSystemRef(netelement_id + "_gps01");
+			//End modify
 			
     		//Add all child to RTMAssociatedPositioningSystem element
     		intric_coor_1.getGeometricCoordinate().add(geo_coor);
@@ -154,44 +162,46 @@ public class Main
     		ele.setId(netelement_id);
     		ele.getAssociatedPositioningSystem().add(assoc_net_element);
 	    	l_ele.add(ele);
-	    	//set Lenght for NetElement ???? Yes - No
-	    	 	
-	    	//Add ID of NetElement for ref to NetworkResource
-	    	TElementWithIDref ref_network = new TElementWithIDref();
-	    	ref_network.setRef(netelement_id);
-	    	
-	    	
+	
 	    	//Start BufferStop and OpenEnd
-	    	// start/end node is only contained in this way -> no connection, "border" of infrastructure
-	    	//first & last Noderef in List Noderef
+	    	// start-end node is only contained in this way -> no connection, "border" of infrastructure
+	    	//first & last NodeRef in List of NodeRef
 	    	Way.NodeRef node_first = way.nd.getFirst();
-	    	addBufferStopOrOpenEnd(node_first, list_BufferStop, list_Border, netelement_id);
+	    	boolean isAddFirstNode = addBufferStopOrOpenEnd(node_first, list_BufferStop, list_Border, netelement_id, l_track);
 	    	
 	    	Way.NodeRef node_last = way.nd.getLast();
-	    	addBufferStopOrOpenEnd(node_last, list_BufferStop, list_Border, netelement_id);
+	    	boolean isAddLastNode =addBufferStopOrOpenEnd(node_last, list_BufferStop, list_Border, netelement_id, l_track);
 	    	//--- END BufferStop and OpenEnd
+	    	
+	    	//Add Track to Tracks if track not yet added by BufferStop, OpenEnd, Switch, Crossing
+	    	if(!isAddFirstNode && !isAddLastNode)
+	    	{
+	    		Track track = wayToTrack(way);
+	    		l_track.add(track);
+	    	}
+	    	
+	    	//End Add Track to Tracks 
 	    	
 	    	//ADD NetRelation     	
 	    	for(int j = indexWay + 1; j < osm.ways.size(); j++)
 	    	{
-	    		Way wayAnother = osm.ways.get(j);  
+	    		Way wayAnother = osm.ways.get(j);  	    		
 	    		if(way.nd.getLast().node.id == wayAnother.nd.getFirst().node.id)
 	    		{
-	    			l_rel.add(setNetRelation(way, wayAnother, 1, 0));
+	    			l_rel.add(setNetRelation(way, wayAnother, 1, 0, l_NetworkResource));
 	    		}
 	    		else if(way.nd.getFirst().node.id == wayAnother.nd.getLast().node.id)
 	    		{
-	    			l_rel.add(setNetRelation(way, wayAnother, 0, 1));
+	    			l_rel.add(setNetRelation(way, wayAnother, 0, 1, l_NetworkResource));
 	    		}
 	    		else if(way.nd.getFirst().node.id == wayAnother.nd.getFirst().node.id)
 	    		{
-	    			l_rel.add(setNetRelation(way, wayAnother, 0, 0));
+	    			l_rel.add(setNetRelation(way, wayAnother, 0, 0, l_NetworkResource));
 	    		}
 	    		else if(way.nd.getLast().node.id == wayAnother.nd.getLast().node.id)
 	    		{
-	    			l_rel.add(setNetRelation(way, wayAnother, 1, 1));
-	    		}
-	    		
+	    			l_rel.add(setNetRelation(way, wayAnother, 1, 1, l_NetworkResource));
+	    		}	
 	    	}
 	    	indexWay++;
 	    }
@@ -223,18 +233,23 @@ public class Main
     	//Add NetElement & NetRelation to topology
     	net_rels.getNetRelation().addAll(l_rel);
     	nets.getNetElement().addAll(l_ele);
+    	level_network.getNetworkResource().addAll(l_NetworkResource);
+    	network.getLevel().add(level_network);
+    	networks.getNetwork().add(network);
     	topo.setNetElements(nets);
     	topo.setNetRelations(net_rels);
+    	topo.setNetworks(networks);
     	
     	//Add list BufferStop to BufferStops element and list Border to Borders element
     	buffer_stops.getBufferStop().addAll(list_BufferStop);
     	borders.getBorder().addAll(list_Border);
     	
     	//FuntionalInfrastructure
+    	trcs.getTrack().addAll(l_track);
     	func_insfr.setTracks(trcs);
     	func_insfr.setBufferStops(buffer_stops);
     	func_insfr.setBorders(borders);
-    	func_insfr.setSwitchesIS(switchesIS);
+    	//func_insfr.setSwitchesIS(switchesIS);
     	is.setFunctionalInfrastructure(func_insfr);
     	JAXBContext jc = JAXBContext.newInstance(RailML.class);
         Marshaller marshaller = jc.createMarshaller();
@@ -243,7 +258,7 @@ public class Main
 //                  new URL("file:///F:/Projects/RailML/osm2railML-master/src/main/xsd/infrastructure3.xsd"));
 //         marshaller.setSchema(schema);
         marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
-        File file = new File("src/main/resource/railml.xml");
+        File file = new File("src/main/resource/RailML3-1.xml");
         marshaller.marshal(rail, file); 
     }
     
@@ -258,12 +273,19 @@ public class Main
     	Track trc = new Track();
     	String trc_id = "trc_" + way.id;
     	trc.setId(trc_id);
+    	TTrackType trc_type = TTrackType.MAIN_TRACK;
+    	trc.setType(trc_type);
     	TElementWithIDref trc_begin_IDref = new TElementWithIDref();
-    	trc_begin_IDref.setRef("tB_" + way.id);
-    	trc.setTrackBegin(trc_begin_IDref);
     	TElementWithIDref trc_end_IDref = new TElementWithIDref();
-    	trc_end_IDref.setRef("tE_" + way.id);
+    	//if(way.nd.getFirst().equals())
+    	// Viet ham kiem tra xem .... neu thoa man begin then
+    	trc_begin_IDref.setRef("bus"+"");
+    	trc.setTrackBegin(trc_begin_IDref);
+    	// end then
+    	// Viet ham kiem tra neu thoa begin then
+		trc_end_IDref.setRef("swi"+"");
     	trc.setTrackEnd(trc_end_IDref);
+    	// end then
     	//Calculate the length based on longitude and latitude of nodes included in the track
     	Double distance = 0.0;
     	if(way.nd.size() >= 2)
@@ -277,12 +299,13 @@ public class Main
     	//set Length for track
     	Length length = new Length();
     	length.setValue(doubleToBigDecimal(distance, 6));
+    	length.setType("physical");
     	trc.getLength().add(length);
     	//set linearLocation
     	RTMLinearLocation linear_loc = new RTMLinearLocation();
     	linear_loc.setId(trc_id + "_lloc01");
     	RTMAssociatedNetElement assoc_netE = new RTMAssociatedNetElement();
-    	assoc_netE.setNetElementRef("null");
+    	assoc_netE.setNetElementRef(trc_id);
     	assoc_netE.setKeepsOrientation(true);
     	linear_loc.getAssociatedNetElement().add(assoc_netE);
     	trc.getLinearLocation().add(linear_loc);
@@ -294,10 +317,12 @@ public class Main
      * Modified date: 26/08/2019
      * Description: Create structure for NetRelation 
      */
-    private static NetRelation setNetRelation(Way way, Way wayAnother, int PosOnA, int PosOnB)
-    {
+    private static NetRelation setNetRelation(Way way, Way wayAnother, int PosOnA, int PosOnB
+    		, List<TElementWithIDref> l_NetworkResource)
+    {	
     	NetRelation net_rel  = new NetRelation();
-    	net_rel.setId("w_" + way.id + "_" + wayAnother.id);
+    	String NetRel = "w_" + way.id + "_" + wayAnother.id;
+    	net_rel.setId(NetRel);
     	net_rel.setPositionOnA(BigInteger.valueOf(PosOnA));
     	net_rel.setPositionOnB(BigInteger.valueOf(PosOnB));	
     	TElementWithIDref eleA = new TElementWithIDref();
@@ -306,7 +331,44 @@ public class Main
     	TElementWithIDref eleB = new TElementWithIDref();
     	eleB.setRef("w_" + wayAnother.id);
     	net_rel.setElementB(eleB);
+    	
+    	//Add Network Resource to List Network Resource
+    	TElementWithIDref NetworkResource = new TElementWithIDref();
+		NetworkResource.setRef(NetRel);
+		l_NetworkResource.add(NetworkResource);
     	return net_rel;
+    }
+    
+    /*Created date: 21/08/2019
+     * Author: Cong Nguyen
+     * Modified date: 30/08/2019
+     * Description: Add data to List<BufferStop> & List<Border>(as OpenEnd at here)
+     */
+    private static boolean addBufferStopOrOpenEnd(Way.NodeRef nd, List<BufferStop> list_BufferStop
+    		, List<Border> list_Border, String netelement_id, List<Track> l_track)
+    {
+    	if(nd.node.wayRefs.size() == 1)
+    	{
+    		String nodeType = nd.node.getTag("railway");
+        	//System.out.println(nd.node.id);
+    		if(nodeType != null && nodeType.equals("buffer_stop"))
+    		{
+        		BufferStop buffer_stop = new BufferStop();
+        		setValueBufferStop(buffer_stop, nd, netelement_id);
+        		list_BufferStop.add(buffer_stop);
+//        		Track track = wayToTrack(nd.way, "buffer_stop" + nd.way.id, "");
+//        		l_track.add(track);
+    		}
+    		else 
+    		{
+            	//Border as Open End
+            	Border border = new Border();     	
+            	setValueBorder(border, nd, netelement_id);
+            	list_Border.add(border);
+            }
+    		return true;
+    	}
+    	return false;
     }
     
     /*
@@ -327,6 +389,9 @@ public class Main
 		RTMGeometricCoordinate geo_coor_buffer = new RTMGeometricCoordinate();
 		geo_coor_buffer.setX(nd.node.lon);
 		geo_coor_buffer.setY(nd.node.lat);
+		//setPositioningSystemRef 30/09/2019
+		geo_coor_buffer.setPositioningSystemRef(netelement_id + "_gps01");
+		//End
 		spot_loc.setGeometricCoordinate(geo_coor_buffer);
 		buffer_stop.getSpotLocation().add(spot_loc);
     }
@@ -336,6 +401,9 @@ public class Main
     	border.setIsOpenEnd(true);
     	String OpenEnd_Id = "openEnd_" + nd.node.id;
     	border.setId(OpenEnd_Id);
+    	//setType 30/09/2019
+    	border.setType("station");
+    	//End setType
     	//set data for SpotLocation element
     	RTMSpotLocation spot_loc = new RTMSpotLocation();
         spot_loc.setId(OpenEnd_Id + "_sloc01");
@@ -343,36 +411,11 @@ public class Main
 		RTMGeometricCoordinate geo_coor_buffer = new RTMGeometricCoordinate();
 		geo_coor_buffer.setX(nd.node.lon);
 		geo_coor_buffer.setY(nd.node.lat);
+		//setPositioningSystemRef 30/09/2019
+		geo_coor_buffer.setPositioningSystemRef(netelement_id + "_gps01");
+		//End setPositioningSystemRef
 		spot_loc.setGeometricCoordinate(geo_coor_buffer);
 		border.getSpotLocation().add(spot_loc);
-    }
-    
-    /*Created date: 21/08/2019
-     * Author: Cong Nguyen
-     * Modified date: 23/08/2019
-     * Description: Add data to List<BufferStop> & List<Border>(as OpenEnd at here)
-     */
-    private static void addBufferStopOrOpenEnd(Way.NodeRef nd, List<BufferStop> list_BufferStop
-    		, List<Border> list_Border, String netelement_id)
-    {
-    	if(nd.node.wayRefs.size() == 1)
-    	{
-    		String nodeType = nd.node.getTag("railway");
-        	//System.out.println(nd.node.id);
-    		if(nodeType != null && nodeType.equals("buffer_stop"))
-    		{
-        		BufferStop buffer_stop = new BufferStop();
-        		setValueBufferStop(buffer_stop, nd, netelement_id);
-        		list_BufferStop.add(buffer_stop);
-    		}
-    		else 
-    		{
-            	//Border as Open End
-            	Border border = new Border();     	
-            	setValueBorder(border, nd, netelement_id);
-            	list_Border.add(border);
-            }
-    	}
     }
     
     /*Create date: 23/08/2019	
