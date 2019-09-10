@@ -22,7 +22,6 @@ import com.sebalbert.osm2railml.osm.Way.NodeRef;
 import https.www_railml_org.schemas._3.*;
 import net.sf.geographiclib.Geodesic;
 import net.sf.geographiclib.GeodesicData;
-
 import org.xml.sax.SAXException;
 
 import javax.management.relation.Relation;
@@ -57,24 +56,8 @@ public class Main
      * @throws JAXBException
      */
     public static void main( String[] args ) throws JAXBException, MalformedURLException, SAXException {
-        OsmExtract osm = OsmExtract.fromFile(new File("src/main/resource/22-08-2019-remove-dupOSM.xml"));
-       
-//        for (Node n : osm.nodes)
-//        {
-//            System.out.println(n.id + ": " + n.lat + "/" + n.lon + " [" + n.wayRefs.size() + " - ");
-//            if(n.wayRefs.size() == 0)
-//            {
-//            	System.out.println("Node " + n.id);
-//            }
-//        }
-        for (Way w : osm.ways){
-            System.out.println(w.id + ":" + w.nd.size() + " - " + w.nd.get(0).node.id + " [" + w.tags.size() +
-                    " - railway:" + w.getTag("railway"));
-            System.out.println("Way Nd: " + w.nd.getLast().way.id);
-        }
-        setTopology(); 
+        setTopology();        
     }
-    
     
     /*
      * Created date: 20/08/2019
@@ -85,7 +68,28 @@ public class Main
     //set topology for micro
     private static void setTopology() throws JAXBException
     {
+    	List<String> listCanon = new ArrayList<>();
     	OsmExtract osm = OsmExtract.fromFile(new File("src/main/resource/22-08-2019-remove-dupOSM.xml"));
+    	for(Way way : osm.ways)
+    	{
+    		System.out.println("Way: " + way.id);
+    		for(Way.NodeRef nd : way.nd)
+    		{
+    			
+    			if(isCanonicalNodeRef(nd))
+    			{
+    				System.out.println(" NodeId: " + nd.node.id + " Position: " + nd.topologicalPosition());
+//    				String Canon = nd.node.id;
+//    				if(listCanon.contains(Canon))
+//    				{
+//    					System.out.println("        NodeRef Duplicate: " + Canon);
+//    					System.out.println("        WayRefs size: " + nd.node.wayRefs.size());
+//    				}
+//    				System.out.println("   NodeRef: " + Canon);
+//    				listCanon.add(Canon);
+    			}
+    		}
+    	}
     	 // creation of railML structure to be marshalled in the end
         RailML rail = new RailML();
         rail.setVersion("3.1");
@@ -111,20 +115,24 @@ public class Main
     	
     	//Track - set structure for Track
     	Tracks trcs = new Tracks();
-    	List<Track> l_track = new ArrayList<Track>();
+    	List<Track> l_track = new ArrayList<>();
     	
 		//BufferStops & OpenEnd- set structure for BufferStops& OpenEnd
 		BufferStops buffer_stops = new BufferStops();
 		Borders borders = new Borders();
-		List<BufferStop> list_BufferStop = new ArrayList<BufferStop>();
-		List<Border> list_Border = new ArrayList<Border>();//Border as OpenEnd
-		
-		//Declare SwitchIS
-		SwitchesIS switchesIS = new SwitchesIS();
-		
-		//declare var i to save index of way in ways
+		SwitchesIS switches = new SwitchesIS();
+		Crossings crossings = new Crossings();
+		List<BufferStop> list_BufferStop = new ArrayList<>();
+		List<Border> list_Border = new ArrayList<>();//Border as OpenEnd
+		List<SwitchIS> list_Switch = new ArrayList<>();
+		List<Crossing> list_Crossing = new ArrayList<>();
+		//wayToTrack(osm.ways, l_track, list_BufferStop, list_Border);
+	
+		//declare variable i to save index of way in ways
 		int indexWay = 0;
 		//Add NetElement
+		List<String> list_switchID = new ArrayList<>();
+		List<String> list_crossingID = new ArrayList<>();
     	for(Way way : osm.ways)
     	{
     		//Add ID for NetElement
@@ -146,9 +154,19 @@ public class Main
     		//Add Child geometricCoordinate into intrinsicCoordinate
     		RTMGeometricCoordinate geo_coor = new RTMGeometricCoordinate();
     		//Without setID
-			int middle = (way.nd.size() - 1) / 2 ;
-			geo_coor.setX(way.nd.get(middle).node.lon);
-			geo_coor.setY(way.nd.get(middle).node.lat);
+    		int middle = way.nd.size()  / 2 ;
+    		double x, y;
+    		if (way.nd.size() %2 == 0) 
+    		{
+    			x = (way.nd.get(middle).node.lon + way.nd.get(middle - 1).node.lon) / 2;  
+    			y = (way.nd.get(middle).node.lat + way.nd.get(middle - 1).node.lat) / 2; 
+    		}
+    		else {  
+    			x = way.nd.get(middle).node.lon; 
+    			y =  way.nd.get(middle).node.lat;
+			}
+			geo_coor.setX(x);
+			geo_coor.setY(y);
 			//Modify date: 28/08
 			geo_coor.setPositioningSystemRef(netelement_id + "_gps01");
 			//End modify
@@ -162,30 +180,11 @@ public class Main
     		ele.setId(netelement_id);
     		ele.getAssociatedPositioningSystem().add(assoc_net_element);
 	    	l_ele.add(ele);
-	
-	    	//Start BufferStop and OpenEnd
-	    	// start-end node is only contained in this way -> no connection, "border" of infrastructure
-	    	//first & last NodeRef in List of NodeRef
-	    	Way.NodeRef node_first = way.nd.getFirst();
-	    	boolean isAddFirstNode = addBufferStopOrOpenEnd(node_first, list_BufferStop, list_Border, netelement_id, l_track);
-	    	
-	    	Way.NodeRef node_last = way.nd.getLast();
-	    	boolean isAddLastNode =addBufferStopOrOpenEnd(node_last, list_BufferStop, list_Border, netelement_id, l_track);
-	    	//--- END BufferStop and OpenEnd
-	    	
-	    	//Add Track to Tracks if track not yet added by BufferStop, OpenEnd, Switch, Crossing
-	    	if(!isAddFirstNode && !isAddLastNode)
-	    	{
-	    		Track track = wayToTrack(way);
-	    		l_track.add(track);
-	    	}
-	    	
-	    	//End Add Track to Tracks 
 	    	
 	    	//ADD NetRelation     	
 	    	for(int j = indexWay + 1; j < osm.ways.size(); j++)
 	    	{
-	    		Way wayAnother = osm.ways.get(j);  	    		
+	    		Way wayAnother = osm.ways.get(j);
 	    		if(way.nd.getLast().node.id == wayAnother.nd.getFirst().node.id)
 	    		{
 	    			l_rel.add(setNetRelation(way, wayAnother, 1, 0, l_NetworkResource));
@@ -203,32 +202,51 @@ public class Main
 	    			l_rel.add(setNetRelation(way, wayAnother, 1, 1, l_NetworkResource));
 	    		}	
 	    	}
+	    	
+	    	for (Way.NodeRef nd : way.nd) {	    
+	            final int waysAtNode = nd.node.wayRefs.size();
+	            final int topologicalPosition = nd.topologicalPosition();
+	            //---level_crossing node is just reference a way
+	            // detect and model switches and crossings
+	            //Compare Switch & Crossing
+	            if(waysAtNode == 1)
+	            {
+					//Start BufferStop and OpenEnd
+					if(nd.topologicalPosition() == 1 || nd.topologicalPosition() == -1)
+					{
+				    	addBufferStopOrOpenEnd(nd, list_BufferStop, list_Border);
+					}
+			    	//--- END BufferStop and OpenEnd
+	            }
+	            else
+	            {
+					//find most probable "partner" at a joining node by computing angles (via geodesic azimuth)
+	                Way.NodeRef partner = mutuallyOppositeEnd(nd);
+	                String nodeType = nd.node.getTag("railway");  
+	                if (nodeType != null && (nodeType.equals("railway_crossing"))) {    
+	                	// avoid setting a crossing at both respective ends of two sequentially joined tracks
+	                	String crossingId = "crossing_" + nd.node.id;
+	                	if (!isCanonicalNodeRef(nd) || list_crossingID.contains(crossingId)) continue;
+	                	list_crossingID.add(crossingId);
+	                    list_Crossing.add(setCrossing(nd));
+	                } 
+	                else 
+	                {
+	                    // unless explicitly set as "railway_crossing", we assume a switch
+	                    //String switchType = nd.node.getTag("railway:switch");
+	                    if (isCanonicalNodeRef(nd) && 
+	                    		(topologicalPosition == Way.NodeRef.INTERIOR || (waysAtNode > 2 && partner != null))) {
+	                    	String switchId = "switch_" + nd.node.id;
+	                    	if(list_switchID.contains(switchId)) continue;
+	                    	list_Switch.add(setStructureSwitchIS(nd));
+	                    	list_switchID.add(switchId); 
+	                    	System.out.println("  NodeId: " + nd.node.id + "     Posiioin + " + topologicalPosition);
+	                    }
+	                }
+				}
+	        }	
 	    	indexWay++;
 	    }
-    	
-    	//Start Add Switch || Crossing
-    	for (Node node : osm.nodes) {
-    		final int way_at_node =  node.wayRefs.size();
-    		//Switch - add SwitchIS to SwitchesIS
-	    	if(way_at_node > 1)
-	    	{
-	    		String nodeType = node.getTag("railway");
-	    		if(nodeType != null && nodeType.equals("switch"))
-	    		{
-	    			switchesIS.getSwitchIS().add(setStructureSwitchIS(node));
-	    		}
-	    		else
-	    		{
-	    			//Crossing or ...
-	    			//Add Crossing at here
-	    			if(nodeType != null && nodeType.equals("crossing"))
-		    		{
-		    			//code for crossing element
-		    		}
-	    		}
-	    	}
-    	}
-    	//End Switch || Crossing
     	
     	//Add NetElement & NetRelation to topology
     	net_rels.getNetRelation().addAll(l_rel);
@@ -239,17 +257,22 @@ public class Main
     	topo.setNetElements(nets);
     	topo.setNetRelations(net_rels);
     	topo.setNetworks(networks);
-    	
+
     	//Add list BufferStop to BufferStops element and list Border to Borders element
     	buffer_stops.getBufferStop().addAll(list_BufferStop);
     	borders.getBorder().addAll(list_Border);
-    	
+    	//Add list SwitchIS to BufferStops element
+    	switches.getSwitchIS().addAll(list_Switch);
+    	//Add list Crossing to Crossings element
+    	crossings.getCrossing().addAll(list_Crossing);
     	//FuntionalInfrastructure
     	trcs.getTrack().addAll(l_track);
-    	func_insfr.setTracks(trcs);
-    	func_insfr.setBufferStops(buffer_stops);
-    	func_insfr.setBorders(borders);
-    	//func_insfr.setSwitchesIS(switchesIS);
+    	//func_insfr.setTracks(trcs);
+    	if(list_BufferStop.size() != 0) func_insfr.setBufferStops(buffer_stops);
+    	if(list_Border.size() != 0) func_insfr.setBorders(borders);
+    	if(list_Switch.size() != 0) func_insfr.setSwitchesIS(switches);
+    	if(list_Crossing.size() != 0) func_insfr.setCrossings(crossings);
+    	
     	is.setFunctionalInfrastructure(func_insfr);
     	JAXBContext jc = JAXBContext.newInstance(RailML.class);
         Marshaller marshaller = jc.createMarshaller();
@@ -258,7 +281,7 @@ public class Main
 //                  new URL("file:///F:/Projects/RailML/osm2railML-master/src/main/xsd/infrastructure3.xsd"));
 //         marshaller.setSchema(schema);
         marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
-        File file = new File("src/main/resource/RailML3-1.xml");
+        File file = new File("src/main/resource/RailML3-1-07-09.xml");
         marshaller.marshal(rail, file); 
     }
     
@@ -268,48 +291,118 @@ public class Main
      * Modified date: ///
      * Description: Create structure for Track
      * */
-    private static Track wayToTrack(Way way)
+    private static void wayToTrack(List<Way> ways, List<Track> trcs, List<BufferStop> list_BufferStop, List<Border> list_Border)
     {
-    	Track trc = new Track();
-    	String trc_id = "trc_" + way.id;
-    	trc.setId(trc_id);
-    	TTrackType trc_type = TTrackType.MAIN_TRACK;
-    	trc.setType(trc_type);
-    	TElementWithIDref trc_begin_IDref = new TElementWithIDref();
-    	TElementWithIDref trc_end_IDref = new TElementWithIDref();
-    	//if(way.nd.getFirst().equals())
-    	// Viet ham kiem tra xem .... neu thoa man begin then
-    	trc_begin_IDref.setRef("bus"+"");
-    	trc.setTrackBegin(trc_begin_IDref);
-    	// end then
-    	// Viet ham kiem tra neu thoa begin then
-		trc_end_IDref.setRef("swi"+"");
-    	trc.setTrackEnd(trc_end_IDref);
-    	// end then
-    	//Calculate the length based on longitude and latitude of nodes included in the track
-    	Double distance = 0.0;
-    	if(way.nd.size() >= 2)
+    	List<String> list_switch = new ArrayList<String>();
+    	List<RTMAssociatedNetElement> list_AssocNetE = new ArrayList<RTMAssociatedNetElement>();	
+    	for(int i = 0; i < ways.size(); i++)
     	{
-    		for (int i = 0; i < way.nd.size() - 1; i++)
-    		{
-    			GeodesicData geo = Geodesic.WGS84.Inverse(way.nd.get(i).node.lat, way.nd.get(i).node.lon, way.nd.get(i+1).node.lat, way.nd.get(i+1).node.lon );
-				distance += geo.s12;  
-    		}
+    		Way way = ways.get(i);
+        	System.out.println("Way: "+ way.id);
+    		int countTrack = 1;
+    		String text = (countTrack < 10 ? "0" : "") + countTrack;	
+	    	Track trc = new Track();
+	    	String trc_id = "trc_" + text;
+	    	trc.setId(trc_id);
+	    	TTrackType trc_type = TTrackType.MAIN_TRACK;
+	    	trc.setType(trc_type);
+	    	TElementWithIDref trc_begin_IDref = new TElementWithIDref();
+	    	TElementWithIDref trc_end_IDref = new TElementWithIDref();
+	    	//set linearLocation
+	    	RTMLinearLocation linear_loc = new RTMLinearLocation();
+	    	linear_loc.setId(trc_id + "_lloc01");
+	    	boolean check = false;//variable to check this track contain one of BufferStop, Switch, Crossing
+	    	RTMAssociatedNetElement assoc_netE = new RTMAssociatedNetElement();    	
+	    	
+	    	for (Way.NodeRef nd : way.nd) {	        	
+	            final int waysAtNode = nd.node.wayRefs.size();
+	            final int topologicalPosition = nd.topologicalPosition();
+	            // detect and model switches and crossings
+	            if (waysAtNode > 1) {
+	            	//find most probable "partner" at a joining node by computing angles (via geodesic azimuth)
+	                Way.NodeRef partner = mutuallyOppositeEnd(nd);
+	                String nodeType = nd.node.getTag("railway");
+	                
+	                if (nodeType != null && (nodeType.equals("railway_crossing") || nodeType.equals("level_crossing"))) {
+	                    // avoid setting a crossing at both respective ends of two sequentially joined tracks
+	                    if (!isCanonicalNodeRef(nd)) continue;
+	                    //Add Crossing at here
+	                    
+	                } else {
+	                    // unless explicitly set as "railway_crossing", we assume a switch
+	                    String switchType = nd.node.getTag("railway:switch");
+	                    if (isCanonicalNodeRef(nd) && 
+	                    		(topologicalPosition == Way.NodeRef.INTERIOR || (waysAtNode > 2 && partner != null))) {
+	                    	String switchId = "switch_" + nd.node.id;
+	                    	if(list_switch.contains(switchId)) continue;
+	                    	System.out.println("    switchId: " + switchId);
+	                    	//ADD Switch at here
+	                    	list_switch.add(switchId); 
+	                    }
+	                }
+	    		}
+	        }
+	    
+	    	//Start BufferStop and OpenEnd
+	    	Way.NodeRef node_first = way.nd.getFirst();
+	    	boolean isAddFirstNode = addBufferStopOrOpenEnd(node_first, list_BufferStop, list_Border);
+	    	
+	    	Way.NodeRef node_last = way.nd.getLast();
+	    	boolean isAddLastNode = addBufferStopOrOpenEnd(node_last, list_BufferStop, list_Border);
+	    	//--- END BufferStop and OpenEnd
+	    	if(isAddFirstNode || isAddLastNode)//One Of BufferStop
+	    	{
+	    		check = true;
+	    		int indexCurrectOfTracks = trcs.size();
+	    		if(indexCurrectOfTracks == 0)
+	    		{
+	    	    	trc_begin_IDref.setRef("bus_" + way.id);
+	    	    	trc.setTrackBegin(trc_begin_IDref);
+	    			trc_end_IDref.setRef("bus_" + way.id);
+	    	    	trc.setTrackEnd(trc_end_IDref);
+	    	    	linear_loc.getAssociatedNetElement().addAll(list_AssocNetE);
+	    	    	list_AssocNetE.clear();
+	    		}
+	    		else
+	    		{
+	    			TElementWithIDref trackBegin = trcs.get(trcs.size() - 1).getTrackEnd();
+	    			trc_begin_IDref.setRef(trackBegin.getRef());
+	    	    	trc.setTrackBegin(trc_begin_IDref);
+	    			trc_end_IDref.setRef("bus" + way.id);
+	    	    	trc.setTrackEnd(trc_end_IDref);
+	    	    	linear_loc.getAssociatedNetElement().addAll(list_AssocNetE);
+	    	    	list_AssocNetE.clear();
+	    		}
+	    		countTrack++;
+	    	}
+	    	else
+	    	{
+	    		//this Track not contain One Of BufferStop, Switch, Crossing
+	    		
+		    	assoc_netE.setNetElementRef("w_" + way.id);
+		    	assoc_netE.setKeepsOrientation(true);
+		    	list_AssocNetE.add(assoc_netE);
+		    	continue;
+	    	}	    	
+	    	
+	    	//Calculate the length based on longitude and latitude of nodes included in the track
+	    	Double distance = 0.0;
+	    	if(way.nd.size() >= 2)
+	    	{
+	    		for (int j = 0; j < way.nd.size() - 1; j++)
+	    		{
+	    			GeodesicData geo = Geodesic.WGS84.Inverse(way.nd.get(j).node.lat, way.nd.get(j).node.lon, way.nd.get(j+1).node.lat, way.nd.get(j+1).node.lon );
+					distance += geo.s12;  
+	    		}
+	    	}
+	    	//set Length for track
+	    	Length length = new Length();
+	    	length.setValue(doubleToBigDecimal(distance, 6));
+	    	length.setType("physical");
+	    	trc.getLength().add(length);
+	    	trc.getLinearLocation().add(linear_loc);
+	    	trcs.add(trc);
     	}
-    	//set Length for track
-    	Length length = new Length();
-    	length.setValue(doubleToBigDecimal(distance, 6));
-    	length.setType("physical");
-    	trc.getLength().add(length);
-    	//set linearLocation
-    	RTMLinearLocation linear_loc = new RTMLinearLocation();
-    	linear_loc.setId(trc_id + "_lloc01");
-    	RTMAssociatedNetElement assoc_netE = new RTMAssociatedNetElement();
-    	assoc_netE.setNetElementRef(trc_id);
-    	assoc_netE.setKeepsOrientation(true);
-    	linear_loc.getAssociatedNetElement().add(assoc_netE);
-    	trc.getLinearLocation().add(linear_loc);
-    	return trc;
     }
     
     /*Created date: 25/08/2019
@@ -345,30 +438,25 @@ public class Main
      * Description: Add data to List<BufferStop> & List<Border>(as OpenEnd at here)
      */
     private static boolean addBufferStopOrOpenEnd(Way.NodeRef nd, List<BufferStop> list_BufferStop
-    		, List<Border> list_Border, String netelement_id, List<Track> l_track)
+    		, List<Border> list_Border)
     {
-    	if(nd.node.wayRefs.size() == 1)
-    	{
-    		String nodeType = nd.node.getTag("railway");
-        	//System.out.println(nd.node.id);
-    		if(nodeType != null && nodeType.equals("buffer_stop"))
-    		{
-        		BufferStop buffer_stop = new BufferStop();
-        		setValueBufferStop(buffer_stop, nd, netelement_id);
-        		list_BufferStop.add(buffer_stop);
-//        		Track track = wayToTrack(nd.way, "buffer_stop" + nd.way.id, "");
-//        		l_track.add(track);
-    		}
-    		else 
-    		{
-            	//Border as Open End
-            	Border border = new Border();     	
-            	setValueBorder(border, nd, netelement_id);
-            	list_Border.add(border);
-            }
+		String nodeType = nd.node.getTag("railway");
+    	//System.out.println(nd.node.id);
+		if(nodeType != null && nodeType.equals("buffer_stop"))
+		{
+    		BufferStop buffer_stop = new BufferStop();
+    		setValueBufferStop(buffer_stop, nd);
+    		list_BufferStop.add(buffer_stop);
     		return true;
-    	}
-    	return false;
+		}
+		else 
+		{
+        	//Border as Open End
+        	Border border = new Border();     	
+        	setValueBorder(border, nd);
+        	list_Border.add(border);
+        	return false;
+        }
     }
     
     /*
@@ -377,15 +465,14 @@ public class Main
      * Modified date: ///
      * Description: Create structure for Buffer stop
      * */
-    private static void setValueBufferStop(BufferStop buffer_stop, Way.NodeRef nd, String netelement_id)
+    private static void setValueBufferStop(BufferStop buffer_stop, Way.NodeRef nd)
     {
+    	String netelement_id = "w_" + nd.way.id;
     	String buffer_stop_id = "bufferStop_" + nd.node.id;
 		buffer_stop.setId(buffer_stop_id);
         RTMSpotLocation spot_loc = new RTMSpotLocation();
         spot_loc.setId(buffer_stop_id + "_sloc01");
-        //need to Understand
         spot_loc.setNetElementRef(netelement_id);	
-        //
 		RTMGeometricCoordinate geo_coor_buffer = new RTMGeometricCoordinate();
 		geo_coor_buffer.setX(nd.node.lon);
 		geo_coor_buffer.setY(nd.node.lat);
@@ -396,10 +483,11 @@ public class Main
 		buffer_stop.getSpotLocation().add(spot_loc);
     }
     
-    private static void setValueBorder(Border border, Way.NodeRef nd, String netelement_id)
+    private static void setValueBorder(Border border, Way.NodeRef nd)
     { 	
     	border.setIsOpenEnd(true);
     	String OpenEnd_Id = "openEnd_" + nd.node.id;
+    	String netelement_id = "w_" + nd.way.id;
     	border.setId(OpenEnd_Id);
     	//setType 30/09/2019
     	border.setType("station");
@@ -423,38 +511,89 @@ public class Main
      * Modify date: 
      * Description: Create structure for SwitchesIS
      */
-    private static SwitchIS setStructureSwitchIS(Node node)
+    private static SwitchIS setStructureSwitchIS(Way.NodeRef nd)
     {
     	SwitchIS switchIS = new SwitchIS();
-		String switchId = "switch_" + node.id;
+		String switchId = "switch_" + nd.node.id;
 		switchIS.setId(switchId);
 		RTMSpotLocation spot_loc = new RTMSpotLocation();
 		spot_loc.setId(switchId + "_sloc01");
-		//need to Understand
-		spot_loc.setNetElementRef("null");
-		//
+		spot_loc.setNetElementRef("w_" + nd.way.id);
 		RTMGeometricCoordinate geo_coor = new RTMGeometricCoordinate();
-		geo_coor.setX(node.lon);
-		geo_coor.setY(node.lat);
+		geo_coor.setX(nd.node.lon);
+		geo_coor.setY(nd.node.lat);
+		geo_coor.setPositioningSystemRef("w_" + nd.way.id + "_gps01");
 		spot_loc.setGeometricCoordinate(geo_coor);
 		switchIS.getSpotLocation().add(spot_loc);
     	return switchIS;
     }
     
-    /* Create date: 26/08/2019
+    /* Create date: 05/09/2019
      * Author: Cong Nguyen
-     * Modify date:
+     * Modify date: 05/09/2019
      * Description: create structure for LevelCrossingIS
      */
-    private static LevelCrossingIS setCrossing(NodeRef nd)
+    private static Crossing setCrossing(NodeRef nd)
+    {
+    	Crossing crossing = new Crossing();
+    	String crossingID = "crossing_" + nd.node.id;
+    	crossing.setId(crossingID);
+    	RTMSpotLocation spot_loc = new RTMSpotLocation();
+		spot_loc.setId(crossingID + "_sloc01");
+		spot_loc.setNetElementRef("w_" + nd.way.id);
+		RTMGeometricCoordinate geo_coor = new RTMGeometricCoordinate();
+		geo_coor.setX(nd.node.lon);
+		geo_coor.setY(nd.node.lat);
+		geo_coor.setPositioningSystemRef("w_" + nd.way.id + "_gps01");
+		spot_loc.setGeometricCoordinate(geo_coor);
+		crossing.getSpotLocation().add(spot_loc);
+    	return crossing;
+    }
+    
+    /* Create date: 26/08/2019
+     * Author: Cong Nguyen
+     * Modify date: 05/09/2019
+     * Description: create structure for LevelCrossingIS
+     */
+    private static LevelCrossingIS setLevelCrossing(NodeRef nd)
     {
     	LevelCrossingIS lvCrossing = new LevelCrossingIS();
-    	lvCrossing.setId("crossing" + nd.node.id);
-    	
+    	String crossingID = "crossing_" + nd.node.id;
+    	lvCrossing.setId(crossingID);
+    	RTMSpotLocation spot_loc = new RTMSpotLocation();
+		spot_loc.setId(crossingID + "_sloc01");
+		spot_loc.setNetElementRef("w_" + nd.way.id);
+		RTMGeometricCoordinate geo_coor = new RTMGeometricCoordinate();
+		geo_coor.setX(nd.node.lon);
+		geo_coor.setY(nd.node.lat);
+		geo_coor.setPositioningSystemRef("w_" + nd.way.id + "_gps01");
+		spot_loc.setGeometricCoordinate(geo_coor);
+		lvCrossing.getSpotLocation().add(spot_loc);
     	return lvCrossing;
     }
     
     private static BigDecimal doubleToBigDecimal(double value, int scale) {
         return new BigDecimal(new BigInteger(Long.toString(Math.round(value * Math.pow(10, scale)))), scale);
     }
+    // find most probable "partner" at a joining node by computing angles (via geodesic azimuth)
+    private static Way.NodeRef oppositeEnd(Way.NodeRef nd) {
+        return nd.node.wayRefs.stream()
+                .filter(r -> r != nd && r.topologicalPosition() != Way.NodeRef.INTERIOR)
+                .min(Comparator.comparingDouble(nd2 -> Math.cos(nd2.azimuthTowardsWay() - nd.azimuthTowardsWay())))
+                .orElse(null);
+    }
+
+    private static Way.NodeRef mutuallyOppositeEnd(Way.NodeRef nd) {
+        Way.NodeRef other = oppositeEnd(nd);
+        if (other == null || oppositeEnd(other) != nd) return null;
+        return other;
+    }
+    // a NodeRef is a canonical place to add elements if it's either an interior node
+    // or the way ID is lexicographically smaller than its partner's (if any)
+    private static boolean isCanonicalNodeRef(Way.NodeRef nd) {
+        if (nd.topologicalPosition() == Way.NodeRef.INTERIOR) return true;
+        Way.NodeRef partner = mutuallyOppositeEnd(nd);
+        return partner == null || partner.way.id.compareTo(nd.way.id) > 0;//
+    }
+    
 }
