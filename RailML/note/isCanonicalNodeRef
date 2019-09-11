@@ -1,0 +1,15 @@
+Return true:
+   - 1 Way có firstNode = lastNode(trong Way đó)
+   - 1 Way có 1 node mà node đó = first || last của 1 Way khác. //Có phải là giải thuật của NetRelation mình đang làm?
+   - Không Duplicate -> Có thể sử dụng cho NetRelaiton -> test thử coi 2 kết quả có giống nhau?
+   - Chỉ refer tới 1 way nhưng wayRefs.size() = 2
+   Way: 400768405
+   NodeRef: 4032839867
+        NodeRef Duplicate: 4032839867
+        WayRefs size: 2
+   NodeRef: 4032839867
+
+Return false:
+   - Node có wayRefs.size() = 2; Có first || last == first || last (anotherWay)
+
+- Thử đưa isCanon lên if() test -> Tạo 1 condition cho cả 3 Buffer_stop, Swtitch, Crossing.
