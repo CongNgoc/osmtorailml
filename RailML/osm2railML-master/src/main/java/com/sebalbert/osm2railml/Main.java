@@ -14,7 +14,6 @@
  */
 package com.sebalbert.osm2railml;
 
-import com.sebalbert.osm2railml.osm.Node;
 import com.sebalbert.osm2railml.osm.OsmExtract;
 import com.sebalbert.osm2railml.osm.Way;
 import com.sebalbert.osm2railml.osm.Way.NodeRef;
@@ -24,24 +23,15 @@ import net.sf.geographiclib.Geodesic;
 import net.sf.geographiclib.GeodesicData;
 import org.xml.sax.SAXException;
 
-import javax.management.relation.Relation;
-import javax.xml.XMLConstants;
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.Marshaller;
-import javax.xml.crypto.dsig.keyinfo.RetrievalMethod;
-import javax.xml.validation.Schema;
-import javax.xml.validation.SchemaFactory;
 import java.io.File;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.MalformedURLException;
-import java.net.URL;
-import java.nio.BufferUnderflowException;
-import java.security.KeyStore.Entry;
 import java.util.*;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
+
 
 /**
  * Main executable.
@@ -56,7 +46,7 @@ public class Main
      * @throws JAXBException
      */
     public static void main( String[] args ) throws JAXBException, MalformedURLException, SAXException {
-        setTopology();        
+        setTopology(); 
     }
     
     /*
@@ -65,31 +55,10 @@ public class Main
      * Modified date: 28/08/2019
      * Description: Create structure for micro topology
      * */
-    //set topology for micro
-    private static void setTopology() throws JAXBException
+    //set structure for micro_topology
+    private static void setTopology() throws JAXBException, MalformedURLException, SAXException
     {
-    	List<String> listCanon = new ArrayList<>();
-    	OsmExtract osm = OsmExtract.fromFile(new File("src/main/resource/22-08-2019-remove-dupOSM.xml"));
-    	for(Way way : osm.ways)
-    	{
-    		System.out.println("Way: " + way.id);
-    		for(Way.NodeRef nd : way.nd)
-    		{
-    			
-    			if(isCanonicalNodeRef(nd))
-    			{
-    				System.out.println(" NodeId: " + nd.node.id + " Position: " + nd.topologicalPosition());
-//    				String Canon = nd.node.id;
-//    				if(listCanon.contains(Canon))
-//    				{
-//    					System.out.println("        NodeRef Duplicate: " + Canon);
-//    					System.out.println("        WayRefs size: " + nd.node.wayRefs.size());
-//    				}
-//    				System.out.println("   NodeRef: " + Canon);
-//    				listCanon.add(Canon);
-    			}
-    		}
-    	}
+    	OsmExtract osm = OsmExtract.fromFile(new File("src/main/resource/inputOSM_09-06.xml"));
     	 // creation of railML structure to be marshalled in the end
         RailML rail = new RailML();
         rail.setVersion("3.1");
@@ -98,7 +67,7 @@ public class Main
         rail.setInfrastructure(is);
         Topology topo = new Topology();
         is.setTopology(topo);
-        //FunctionalInfrastructure contain "tracks", "crossing", "bufferStop"
+        //FunctionalInfrastructure contain "tracks", "crossing", "bufferStop", "switch"
         FunctionalInfrastructure func_insfr = new FunctionalInfrastructure();
         
         //NetElemnt & NetRelation & NetWork
@@ -126,34 +95,28 @@ public class Main
 		List<Border> list_Border = new ArrayList<>();//Border as OpenEnd
 		List<SwitchIS> list_Switch = new ArrayList<>();
 		List<Crossing> list_Crossing = new ArrayList<>();
-		//wayToTrack(osm.ways, l_track, list_BufferStop, list_Border);
-	
-		//declare variable i to save index of way in ways
-		int indexWay = 0;
-		//Add NetElement
 		List<String> list_switchID = new ArrayList<>();
 		List<String> list_crossingID = new ArrayList<>();
+		
+		//Add NetElement
+		//declare variable i to save index of way in ways
+		int indexWay = 0;
     	for(Way way : osm.ways)
     	{
     		//Add ID for NetElement
-    		String netelement_id = "w_" + way.id;
-    		
+    		String netelement_id = "w_" + way.id;   		
     		//Add NetworkResource to List NetworkResource
     		TElementWithIDref NetworkResource = new TElementWithIDref();
     		NetworkResource.setRef(netelement_id);
-    		l_NetworkResource.add(NetworkResource);
-    		
+    		l_NetworkResource.add(NetworkResource);    		
 	    	//Add Child associatedPositioningSystem into NetElement
 	    	RTMAssociatedPositioningSystem assoc_net_element = new RTMAssociatedPositioningSystem();
-	    	assoc_net_element.setId(netelement_id + "_gps01");
-    		
+	    	assoc_net_element.setId(netelement_id + "_gps01");   		
     		//Add Child intrinsicCoordinate into associatedPositioningSystem
     		RTMIntrinsicCoordinate intric_coor_1 = new RTMIntrinsicCoordinate();
-    		intric_coor_1.setId(netelement_id + "_gps01" + "_ic01");
-    		
+    		intric_coor_1.setId(netelement_id + "_gps01" + "_ic01");    		
     		//Add Child geometricCoordinate into intrinsicCoordinate
     		RTMGeometricCoordinate geo_coor = new RTMGeometricCoordinate();
-    		//Without setID
     		int middle = way.nd.size()  / 2 ;
     		double x, y;
     		if (way.nd.size() %2 == 0) 
@@ -167,14 +130,10 @@ public class Main
 			}
 			geo_coor.setX(x);
 			geo_coor.setY(y);
-			//Modify date: 28/08
-			geo_coor.setPositioningSystemRef(netelement_id + "_gps01");
-			//End modify
-			
+			geo_coor.setPositioningSystemRef(netelement_id + "_gps01");		
     		//Add all child to RTMAssociatedPositioningSystem element
     		intric_coor_1.getGeometricCoordinate().add(geo_coor);
-    		assoc_net_element.getIntrinsicCoordinate().add(intric_coor_1);
-    		
+    		assoc_net_element.getIntrinsicCoordinate().add(intric_coor_1);   		
     		//NetElement	
 	    	NetElement ele = new NetElement();
     		ele.setId(netelement_id);
@@ -201,50 +160,92 @@ public class Main
 	    		{
 	    			l_rel.add(setNetRelation(way, wayAnother, 1, 1, l_NetworkResource));
 	    		}	
-	    	}
-	    	
-	    	for (Way.NodeRef nd : way.nd) {	    
+	    	}    		
+    		//Start Add Track to list Track
+    		List<String> list_track_of_way = new ArrayList<>();
+    		System.out.println("WayID: " + way.id);
+    		
+	    	for (Way.NodeRef nd : way.nd) {	        	
 	            final int waysAtNode = nd.node.wayRefs.size();
 	            final int topologicalPosition = nd.topologicalPosition();
 	            //---level_crossing node is just reference a way
 	            // detect and model switches and crossings
-	            //Compare Switch & Crossing
 	            if(waysAtNode == 1)
 	            {
-					//Start BufferStop and OpenEnd
-					if(nd.topologicalPosition() == 1 || nd.topologicalPosition() == -1)
-					{
-				    	addBufferStopOrOpenEnd(nd, list_BufferStop, list_Border);
-					}
-			    	//--- END BufferStop and OpenEnd
+	            	if(nd.topologicalPosition() != NodeRef.INTERIOR)
+	            	{
+		    	    	boolean isBuffer_stop = addBufferStopOrOpenEnd(nd, list_BufferStop, list_Border);
+		    	    	if(isBuffer_stop){
+		    	    		list_track_of_way.add("bus_" + nd.node.id);
+		    	    	}
+	            	} 
 	            }
-	            else
-	            {
-					//find most probable "partner" at a joining node by computing angles (via geodesic azimuth)
+	            else {
+	            	//find most probable "partner" at a joining node by computing angles (via geodesic azimuth)
 	                Way.NodeRef partner = mutuallyOppositeEnd(nd);
-	                String nodeType = nd.node.getTag("railway");  
+	                String nodeType = nd.node.getTag("railway"); 
 	                if (nodeType != null && (nodeType.equals("railway_crossing"))) {    
 	                	// avoid setting a crossing at both respective ends of two sequentially joined tracks
 	                	String crossingId = "crossing_" + nd.node.id;
 	                	if (!isCanonicalNodeRef(nd) || list_crossingID.contains(crossingId)) continue;
+	                	System.out.println("    " + crossingId);
 	                	list_crossingID.add(crossingId);
+	                	//Track
+	                	if(list_track_of_way.size() != 0 || nd.topologicalPosition() == NodeRef.FIRST)
+	    	    		{
+	                		list_track_of_way.add("crossing_" + nd.node.id);
+	    	    		}
+	    	    		else
+	    	    		{
+	    	    			//set trackBegin = trackEnd at here 
+	    	    			list_track_of_way.add("crossing_" + nd.node.id);
+	    	    			list_track_of_way.add("crossing_" + nd.node.id);
+	    	    		}
+	                	//End Track
 	                    list_Crossing.add(setCrossing(nd));
-	                } 
-	                else 
-	                {
+	                } else {
 	                    // unless explicitly set as "railway_crossing", we assume a switch
 	                    //String switchType = nd.node.getTag("railway:switch");
 	                    if (isCanonicalNodeRef(nd) && 
 	                    		(topologicalPosition == Way.NodeRef.INTERIOR || (waysAtNode > 2 && partner != null))) {
-	                    	String switchId = "switch_" + nd.node.id;
+	                    	String switchId = "switch_" + nd.node.id ;
 	                    	if(list_switchID.contains(switchId)) continue;
+	                    	System.out.println("    " + switchId);
+	                    	if(list_track_of_way.size() != 0 || nd.topologicalPosition() == NodeRef.FIRST)
+		    	    		{
+		                		list_track_of_way.add("switch_" + nd.node.id);
+		    	    		}
+		    	    		else
+		    	    		{
+		    	    			//set trackBegin = trackEnd at here
+		    	    			list_track_of_way.add("switch_" + nd.node.id);
+		    	    			list_track_of_way.add("switch_" + nd.node.id);
+		    	    		}
 	                    	list_Switch.add(setStructureSwitchIS(nd));
 	                    	list_switchID.add(switchId); 
-	                    	System.out.println("  NodeId: " + nd.node.id + "     Posiioin + " + topologicalPosition);
 	                    }
 	                }
-				}
-	        }	
+	    		}
+	        }
+	    	int NumsOfTrack = list_track_of_way.size();
+	    	switch (NumsOfTrack) {
+			case 0:
+				l_track.add(wayToTrack(way, null, null, ""));
+				break;
+			case 1:
+				break;
+			case 2:
+				l_track.add(wayToTrack(way, list_track_of_way.get(0), list_track_of_way.get(1), ""));
+				break;
+			default:
+				for(int indexTrack = 1; indexTrack < NumsOfTrack - 1; indexTrack++)
+		    	{
+	    			String sequence = (indexTrack < 10) ? "0" + indexTrack : "" + indexTrack; 
+	    			l_track.add(wayToTrack(way, list_track_of_way.get(indexTrack), list_track_of_way.get(indexTrack+1), sequence));
+		    	} 
+				break;
+			}	    
+	    	//End Add Track to list Track
 	    	indexWay++;
 	    }
     	
@@ -267,7 +268,7 @@ public class Main
     	crossings.getCrossing().addAll(list_Crossing);
     	//FuntionalInfrastructure
     	trcs.getTrack().addAll(l_track);
-    	//func_insfr.setTracks(trcs);
+    	func_insfr.setTracks(trcs);
     	if(list_BufferStop.size() != 0) func_insfr.setBufferStops(buffer_stops);
     	if(list_Border.size() != 0) func_insfr.setBorders(borders);
     	if(list_Switch.size() != 0) func_insfr.setSwitchesIS(switches);
@@ -281,7 +282,7 @@ public class Main
 //                  new URL("file:///F:/Projects/RailML/osm2railML-master/src/main/xsd/infrastructure3.xsd"));
 //         marshaller.setSchema(schema);
         marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
-        File file = new File("src/main/resource/RailML3-1-07-09.xml");
+        File file = new File("src/main/resource/RailML31-09092019-0135.xml");
         marshaller.marshal(rail, file); 
     }
     
@@ -291,118 +292,54 @@ public class Main
      * Modified date: ///
      * Description: Create structure for Track
      * */
-    private static void wayToTrack(List<Way> ways, List<Track> trcs, List<BufferStop> list_BufferStop, List<Border> list_Border)
-    {
-    	List<String> list_switch = new ArrayList<String>();
-    	List<RTMAssociatedNetElement> list_AssocNetE = new ArrayList<RTMAssociatedNetElement>();	
-    	for(int i = 0; i < ways.size(); i++)
+    private static Track wayToTrack(Way way, String trackBegin, String trackEnd, String sequence)
+    {	
+    	Track trc = new Track();
+    	String trc_id = "trc_" + way.id;
+    	if(!sequence.equals(""))
     	{
-    		Way way = ways.get(i);
-        	System.out.println("Way: "+ way.id);
-    		int countTrack = 1;
-    		String text = (countTrack < 10 ? "0" : "") + countTrack;	
-	    	Track trc = new Track();
-	    	String trc_id = "trc_" + text;
-	    	trc.setId(trc_id);
-	    	TTrackType trc_type = TTrackType.MAIN_TRACK;
-	    	trc.setType(trc_type);
-	    	TElementWithIDref trc_begin_IDref = new TElementWithIDref();
-	    	TElementWithIDref trc_end_IDref = new TElementWithIDref();
-	    	//set linearLocation
-	    	RTMLinearLocation linear_loc = new RTMLinearLocation();
-	    	linear_loc.setId(trc_id + "_lloc01");
-	    	boolean check = false;//variable to check this track contain one of BufferStop, Switch, Crossing
-	    	RTMAssociatedNetElement assoc_netE = new RTMAssociatedNetElement();    	
-	    	
-	    	for (Way.NodeRef nd : way.nd) {	        	
-	            final int waysAtNode = nd.node.wayRefs.size();
-	            final int topologicalPosition = nd.topologicalPosition();
-	            // detect and model switches and crossings
-	            if (waysAtNode > 1) {
-	            	//find most probable "partner" at a joining node by computing angles (via geodesic azimuth)
-	                Way.NodeRef partner = mutuallyOppositeEnd(nd);
-	                String nodeType = nd.node.getTag("railway");
-	                
-	                if (nodeType != null && (nodeType.equals("railway_crossing") || nodeType.equals("level_crossing"))) {
-	                    // avoid setting a crossing at both respective ends of two sequentially joined tracks
-	                    if (!isCanonicalNodeRef(nd)) continue;
-	                    //Add Crossing at here
-	                    
-	                } else {
-	                    // unless explicitly set as "railway_crossing", we assume a switch
-	                    String switchType = nd.node.getTag("railway:switch");
-	                    if (isCanonicalNodeRef(nd) && 
-	                    		(topologicalPosition == Way.NodeRef.INTERIOR || (waysAtNode > 2 && partner != null))) {
-	                    	String switchId = "switch_" + nd.node.id;
-	                    	if(list_switch.contains(switchId)) continue;
-	                    	System.out.println("    switchId: " + switchId);
-	                    	//ADD Switch at here
-	                    	list_switch.add(switchId); 
-	                    }
-	                }
-	    		}
-	        }
-	    
-	    	//Start BufferStop and OpenEnd
-	    	Way.NodeRef node_first = way.nd.getFirst();
-	    	boolean isAddFirstNode = addBufferStopOrOpenEnd(node_first, list_BufferStop, list_Border);
-	    	
-	    	Way.NodeRef node_last = way.nd.getLast();
-	    	boolean isAddLastNode = addBufferStopOrOpenEnd(node_last, list_BufferStop, list_Border);
-	    	//--- END BufferStop and OpenEnd
-	    	if(isAddFirstNode || isAddLastNode)//One Of BufferStop
-	    	{
-	    		check = true;
-	    		int indexCurrectOfTracks = trcs.size();
-	    		if(indexCurrectOfTracks == 0)
-	    		{
-	    	    	trc_begin_IDref.setRef("bus_" + way.id);
-	    	    	trc.setTrackBegin(trc_begin_IDref);
-	    			trc_end_IDref.setRef("bus_" + way.id);
-	    	    	trc.setTrackEnd(trc_end_IDref);
-	    	    	linear_loc.getAssociatedNetElement().addAll(list_AssocNetE);
-	    	    	list_AssocNetE.clear();
-	    		}
-	    		else
-	    		{
-	    			TElementWithIDref trackBegin = trcs.get(trcs.size() - 1).getTrackEnd();
-	    			trc_begin_IDref.setRef(trackBegin.getRef());
-	    	    	trc.setTrackBegin(trc_begin_IDref);
-	    			trc_end_IDref.setRef("bus" + way.id);
-	    	    	trc.setTrackEnd(trc_end_IDref);
-	    	    	linear_loc.getAssociatedNetElement().addAll(list_AssocNetE);
-	    	    	list_AssocNetE.clear();
-	    		}
-	    		countTrack++;
-	    	}
-	    	else
-	    	{
-	    		//this Track not contain One Of BufferStop, Switch, Crossing
-	    		
-		    	assoc_netE.setNetElementRef("w_" + way.id);
-		    	assoc_netE.setKeepsOrientation(true);
-		    	list_AssocNetE.add(assoc_netE);
-		    	continue;
-	    	}	    	
-	    	
-	    	//Calculate the length based on longitude and latitude of nodes included in the track
-	    	Double distance = 0.0;
-	    	if(way.nd.size() >= 2)
-	    	{
-	    		for (int j = 0; j < way.nd.size() - 1; j++)
-	    		{
-	    			GeodesicData geo = Geodesic.WGS84.Inverse(way.nd.get(j).node.lat, way.nd.get(j).node.lon, way.nd.get(j+1).node.lat, way.nd.get(j+1).node.lon );
-					distance += geo.s12;  
-	    		}
-	    	}
-	    	//set Length for track
-	    	Length length = new Length();
-	    	length.setValue(doubleToBigDecimal(distance, 6));
-	    	length.setType("physical");
-	    	trc.getLength().add(length);
-	    	trc.getLinearLocation().add(linear_loc);
-	    	trcs.add(trc);
+    		trc_id += "_" + sequence ;
     	}
+    	
+    	trc.setId(trc_id);
+    	TTrackType trc_type = TTrackType.MAIN_TRACK;
+    	trc.setType(trc_type);
+    	if(trackBegin != null)
+    	{
+    		TElementWithIDref trc_begin_IDref = new TElementWithIDref();
+        	trc_begin_IDref.setRef(trackBegin);
+        	trc.setTrackBegin(trc_begin_IDref);
+    	}
+    	if(trackEnd != null)
+    	{
+    		TElementWithIDref trc_end_IDref = new TElementWithIDref();
+        	trc_end_IDref.setRef(trackEnd);
+        	trc.setTrackEnd(trc_end_IDref);
+    	}
+    	//set linearLocation
+    	RTMLinearLocation linear_loc = new RTMLinearLocation();
+    	linear_loc.setId(trc_id + "_lloc01");
+    	RTMAssociatedNetElement assoc_netE = new RTMAssociatedNetElement();    	    	
+    	assoc_netE.setNetElementRef("w_" + way.id);
+    	assoc_netE.setKeepsOrientation(true);
+    	linear_loc.getAssociatedNetElement().add(assoc_netE);
+    	//Calculate the length based on longitude and latitude of nodes included in the track
+    	Double distance = 0.0;
+    	if(way.nd.size() >= 2)
+    	{
+    		for (int j = 0; j < way.nd.size() - 1; j++)
+    		{
+    			GeodesicData geo = Geodesic.WGS84.Inverse(way.nd.get(j).node.lat, way.nd.get(j).node.lon, way.nd.get(j+1).node.lat, way.nd.get(j+1).node.lon );
+				distance += geo.s12;  
+    		}
+    	}
+    	//set Length for track
+    	Length length = new Length();
+    	length.setValue(doubleToBigDecimal(distance, 6));
+    	length.setType("physical");
+    	trc.getLength().add(length);
+    	trc.getLinearLocation().add(linear_loc);
+    	return trc;
     }
     
     /*Created date: 25/08/2019
@@ -441,7 +378,6 @@ public class Main
     		, List<Border> list_Border)
     {
 		String nodeType = nd.node.getTag("railway");
-    	//System.out.println(nd.node.id);
 		if(nodeType != null && nodeType.equals("buffer_stop"))
 		{
     		BufferStop buffer_stop = new BufferStop();
@@ -468,7 +404,7 @@ public class Main
     private static void setValueBufferStop(BufferStop buffer_stop, Way.NodeRef nd)
     {
     	String netelement_id = "w_" + nd.way.id;
-    	String buffer_stop_id = "bufferStop_" + nd.node.id;
+    	String buffer_stop_id = "bus_" + nd.node.id;
 		buffer_stop.setId(buffer_stop_id);
         RTMSpotLocation spot_loc = new RTMSpotLocation();
         spot_loc.setId(buffer_stop_id + "_sloc01");
@@ -555,7 +491,8 @@ public class Main
      * Modify date: 05/09/2019
      * Description: create structure for LevelCrossingIS
      */
-    private static LevelCrossingIS setLevelCrossing(NodeRef nd)
+    @SuppressWarnings("unused")
+	private static LevelCrossingIS setLevelCrossing(NodeRef nd)
     {
     	LevelCrossingIS lvCrossing = new LevelCrossingIS();
     	String crossingID = "crossing_" + nd.node.id;
